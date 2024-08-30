@@ -12,8 +12,7 @@ def get_file_average_volume(filename):
     raw = array.array(array_type, sound._data)
     total = 0
     count = 0
-    data = [abs(r) for r in raw]
-    data.sort()
+    data = sorted([abs(r) for r in raw])
     data = data[int(len(data)*0.1):]
     for d in data:
         total += d
