@@ -13,7 +13,7 @@ def get_file_average_volume(filename):
     total = 0
     count = 0
     data = sorted([abs(r) for r in raw])
-    data = data[int(len(data)*0.6):]
+    data = data[int(len(data)*0.8):]
     total = sum(data)
     count = len(data)
     return total/count
