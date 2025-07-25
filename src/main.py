@@ -12,7 +12,8 @@ def get_file_average_volume(filename):
     raw = array.array(array_type, sound._data)
     total = 0
     count = 0
-    data = sorted([abs(r) for r in raw])
+    data = [abs(r) for r in raw]
+    data.sort()
     data = data[int(len(data)*0.8):]
     total = sum(data)
     count = len(data)
@@ -22,12 +23,17 @@ def parse_and_normalize(in_path, out_path):
     in_files = [f for f in os.listdir(in_path) if os.path.isfile(os.path.join(in_path, f))]
     volumes = {}
     peak = 0
+    p = []
     for f in in_files:
         print("Analyzing %s." % os.path.join(in_path, f))
         volumes[f] = get_file_average_volume(os.path.join(in_path, f))
         peak = max(peak, volumes[f])
     for f in in_files:
-        ffmpeg.input(os.path.join(in_path, f)).filter('volume', float(peak/volumes[f])).output(os.path.join(out_path, f)).run()
+        if volumes[f] == 0.0:
+            volumes[f] = 1.0
+        p.append(ffmpeg.input(os.path.join(in_path, f)).filter('volume', float(peak/volumes[f])).output(os.path.join(out_path, f)).run_async(pipe_stdin=True))
+    for i in range(len(p)):
+        p[i].wait()
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
