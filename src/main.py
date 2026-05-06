@@ -4,6 +4,8 @@ import ffmpeg
 import sys
 from pydub import AudioSegment
 from pydub.utils import get_array_type
+import subprocess
+import time
 
 def get_file_average_volume(filename):
     sound = AudioSegment.from_file(file=filename)
@@ -23,17 +25,47 @@ def parse_and_normalize(in_path, out_path):
     in_files = [f for f in os.listdir(in_path) if os.path.isfile(os.path.join(in_path, f))]
     volumes = {}
     peak = 0
-    p = []
+    p = {}
+    count = 0
+    start = time.time()
+    print("Analyzing...", end='', flush=True)
     for f in in_files:
-        print("Analyzing %s." % os.path.join(in_path, f))
-        volumes[f] = get_file_average_volume(os.path.join(in_path, f))
-        peak = max(peak, volumes[f])
+        count = count + 1
+        p[f] = subprocess.Popen(["python3", "src/swarmer.py", os.path.join(in_path, f)], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+        if (count % os.cpu_count() == 0):
+            for k in p.keys():
+                data = float(p[k].communicate()[0])
+                volumes[k] = data
+                peak = max(peak, data)
+            p = {}
+    for k in p.keys():
+        data = float(p[k].communicate()[0])
+        volumes[k] = data
+        peak = max(peak, data)
+    p = []
+    print(" Done! (%s seconds)" % int(time.time() - start), flush=True)
+
+    print("Normalizing...", end='', flush=True)
+
     for f in in_files:
         if volumes[f] == 0.0:
             volumes[f] = 1.0
-        p.append(ffmpeg.input(os.path.join(in_path, f)).filter('volume', float(peak/volumes[f])).output(os.path.join(out_path, f)).run_async(pipe_stdin=True))
+
+        probe = ffmpeg.probe(os.path.join(in_path, f))
+        has_art = any(s['codec_type'] == 'video' for s in probe['streams'])
+        i = ffmpeg.input(os.path.join(in_path, f))
+        a = i['a'].filter('volume', float(peak/volumes[f]))
+        streams = [a, i['v']] if has_art else [a]
+
+        p.append(ffmpeg.output(*streams, os.path.join(out_path, f), vcodec="copy", id3v2_version=3, write_xing=1).run_async(pipe_stdin=True, quiet=True))
+        if len(p) % os.cpu_count() == 0:
+            for i in range(len(p)):
+                p[i].wait()
     for i in range(len(p)):
         p[i].wait()
+
+    print(" Done! (%s seconds)" % int(time.time() - start), flush=True)
+    print("Done!", flush=True)
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
